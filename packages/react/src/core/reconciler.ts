@@ -59,7 +59,8 @@ export const reconcile = (
 const mount = (parentDom: HTMLElement, node: VNode, path: string): Instance => {
   // TEXT_ELEMENT 처리
   if (node.type === TEXT_ELEMENT) {
-    const textNode = document.createTextNode(node.props.nodeValue || "");
+    const props = node.props || {};
+    const textNode = document.createTextNode(props.nodeValue || "");
     const instance: Instance = {
       kind: NodeTypes.TEXT,
       dom: textNode,
@@ -74,7 +75,8 @@ const mount = (parentDom: HTMLElement, node: VNode, path: string): Instance => {
 
   // Fragment 처리
   if (node.type === Fragment) {
-    const children = (node.props.children || []) as VNode[];
+    const props = node.props || {};
+    const children = (props.children || []) as VNode[];
     const childInstances: (Instance | null)[] = [];
 
     for (let i = 0; i < children.length; i++) {
@@ -106,9 +108,10 @@ const mount = (parentDom: HTMLElement, node: VNode, path: string): Instance => {
 
   // DOM 요소 처리
   const dom = document.createElement(node.type as string);
-  setDomProps(dom as HTMLElement, node.props);
+  const props = node.props || {};
+  setDomProps(dom as HTMLElement, props);
 
-  const children = (node.props.children || []) as VNode[];
+  const children = (props.children || []) as VNode[];
   const childInstances: (Instance | null)[] = [];
 
   for (let i = 0; i < children.length; i++) {
@@ -144,8 +147,8 @@ const mountComponent = (parentDom: HTMLElement, node: VNode, path: string): Inst
   enterComponent(componentPath);
 
   try {
-    const childNode = Component(node.props);
-    if (childNode === null) {
+    const childNode = Component(node.props || {});
+    if (childNode === null || childNode === undefined) {
       const instance: Instance = {
         kind: NodeTypes.COMPONENT,
         dom: null,
@@ -184,7 +187,8 @@ const update = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement, p
   // TEXT_ELEMENT 처리
   if (oldInstance.kind === NodeTypes.TEXT && newNode.type === TEXT_ELEMENT) {
     if (oldInstance.dom) {
-      (oldInstance.dom as Text).nodeValue = newNode.props.nodeValue || "";
+      const props = newNode.props || {};
+      (oldInstance.dom as Text).nodeValue = props.nodeValue || "";
     }
     oldInstance.node = newNode;
     return oldInstance;
@@ -192,7 +196,8 @@ const update = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement, p
 
   // Fragment 처리
   if (oldInstance.kind === NodeTypes.FRAGMENT && newNode.type === Fragment) {
-    reconcileChildren(parentDom, oldInstance, (newNode.props.children || []) as VNode[], path);
+    const props = newNode.props || {};
+    reconcileChildren(parentDom, oldInstance, (props.children || []) as VNode[], path);
     oldInstance.dom = getFirstDomFromChildren(oldInstance.children);
     oldInstance.node = newNode;
     return oldInstance;
@@ -205,11 +210,14 @@ const update = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement, p
 
   // DOM 요소 처리
   if (oldInstance.dom) {
-    updateDomProps(oldInstance.dom as HTMLElement, oldInstance.node.props, newNode.props);
+    const oldProps = oldInstance.node.props || {};
+    const newProps = newNode.props || {};
+    updateDomProps(oldInstance.dom as HTMLElement, oldProps, newProps);
   }
 
   const domForChildren = (oldInstance.dom as HTMLElement) || parentDom;
-  reconcileChildren(domForChildren, oldInstance, (newNode.props.children || []) as VNode[], path);
+  const props = newNode.props || {};
+  reconcileChildren(domForChildren, oldInstance, (props.children || []) as VNode[], path);
 
   oldInstance.node = newNode;
   return oldInstance;
@@ -226,8 +234,8 @@ const updateComponent = (oldInstance: Instance, newNode: VNode, parentDom: HTMLE
   enterComponent(path);
 
   try {
-    const childNode = Component(newNode.props);
-    if (childNode === null) {
+    const childNode = Component(newNode.props || {});
+    if (childNode === null || childNode === undefined) {
       if (oldInstance.childInstance) {
         removeInstance(parentDom, oldInstance.childInstance);
       }
@@ -266,7 +274,7 @@ const reconcileChildren = (
   const oldChildren = instance.children || [];
   const childInstances: (Instance | null)[] = [];
 
-  // Key 기반 Map 생성
+  // Key 기반 Map 생성 (null이 아닌 자식만)
   const keyMap = new Map<string | number, Instance>();
   for (const oldChild of oldChildren) {
     if (oldChild && oldChild.key !== null) {
@@ -275,12 +283,35 @@ const reconcileChildren = (
   }
 
   const usedKeys = new Set<string | number>();
+  const usedInstances = new Set<Instance>();
+  // 실제 렌더링된 oldChildren만 필터링
+  const renderedOldChildren = oldChildren.filter((child) => child !== null);
+  let renderedOldIndex = 0;
 
   // 새 자식 처리
   for (let i = 0; i < newChildren.length; i++) {
     const newChild = newChildren[i];
+
+    // 조건부 렌더링으로 인한 null/false 처리
     if (isEmptyValue(newChild)) {
       childInstances.push(null);
+      // key가 없는 기존 자식이 있으면 제거 (인덱스 매칭)
+      while (renderedOldIndex < renderedOldChildren.length) {
+        const oldChild = renderedOldChildren[renderedOldIndex];
+        if (!oldChild) {
+          renderedOldIndex++;
+          continue;
+        }
+        // key가 있는 자식은 건너뛰기
+        if (oldChild.key !== null) {
+          renderedOldIndex++;
+          continue;
+        }
+        // key가 없는 자식이면 제거
+        removeInstance(parentDom, oldChild);
+        renderedOldIndex++;
+        break;
+      }
       continue;
     }
 
@@ -294,19 +325,44 @@ const reconcileChildren = (
       if (matched.node.type === newChild.type) {
         childInstance = reconcile(parentDom, matched, newChild, childPath);
         usedKeys.add(newChild.key);
+        usedInstances.add(matched);
         // 순서가 변경되었는지 확인
-        const oldIndex = oldChildren.indexOf(matched);
-        if (oldIndex !== i) {
+        const matchedIndex = renderedOldChildren.indexOf(matched);
+        const currentRenderedIndex = renderedOldChildren.findIndex(
+          (c, idx) => idx >= renderedOldIndex && c && c.key === null && !usedInstances.has(c),
+        );
+        if (matchedIndex !== currentRenderedIndex && matchedIndex >= 0) {
           needsInsertion = true;
         }
       }
     }
 
-    // Key로 매칭되지 않으면 인덱스로 매칭
-    if (!childInstance && i < oldChildren.length) {
-      const oldChild = oldChildren[i];
-      if (oldChild && oldChild.node.type === newChild.type && oldChild.key === null) {
-        childInstance = reconcile(parentDom, oldChild, newChild, childPath);
+    // Key로 매칭되지 않으면 인덱스로 매칭 (key가 없는 자식만)
+    if (!childInstance) {
+      while (renderedOldIndex < renderedOldChildren.length) {
+        const oldChild = renderedOldChildren[renderedOldIndex];
+        if (!oldChild) {
+          renderedOldIndex++;
+          continue;
+        }
+        // 이미 사용된 인스턴스는 건너뛰기
+        if (usedInstances.has(oldChild)) {
+          renderedOldIndex++;
+          continue;
+        }
+        // key가 있는 자식은 건너뛰기
+        if (oldChild.key !== null) {
+          renderedOldIndex++;
+          continue;
+        }
+        // 타입이 같으면 매칭
+        if (oldChild.node.type === newChild.type) {
+          childInstance = reconcile(parentDom, oldChild, newChild, childPath);
+          usedInstances.add(oldChild);
+          renderedOldIndex++;
+          break;
+        }
+        renderedOldIndex++;
       }
     }
 
@@ -318,14 +374,39 @@ const reconcileChildren = (
 
     // 순서가 변경되었거나 새로 마운트된 경우 올바른 위치에 삽입
     if (needsInsertion && childInstance) {
-      const nextSibling = i < newChildren.length - 1 ? getFirstDom(childInstances[i + 1] || null) : null;
+      // 다음 실제 렌더링된 자식의 DOM을 찾아서 그 앞에 삽입
+      let nextSibling: HTMLElement | Text | null = null;
+      for (let j = i + 1; j < newChildren.length; j++) {
+        const nextChild = newChildren[j];
+        if (!isEmptyValue(nextChild)) {
+          // childInstances에서 다음 실제 자식 찾기
+          if (j < childInstances.length) {
+            const inst = childInstances[j];
+            if (inst) {
+              nextSibling = getFirstDom(inst) as HTMLElement | Text | null;
+              break;
+            }
+          }
+          // 아직 처리되지 않았다면 기존 자식 중에서 찾기
+          if (!nextSibling) {
+            for (const oldChild of renderedOldChildren) {
+              if (oldChild && oldChild.node === nextChild && !usedInstances.has(oldChild)) {
+                nextSibling = getFirstDom(oldChild) as HTMLElement | Text | null;
+                break;
+              }
+            }
+          }
+          break;
+        }
+      }
+
       if (nextSibling) {
         // 기존 DOM에서 제거 후 올바른 위치에 삽입
         const firstDom = getFirstDom(childInstance);
         if (firstDom && firstDom.parentNode === parentDom) {
           parentDom.removeChild(firstDom);
         }
-        insertInstance(parentDom, childInstance, nextSibling as HTMLElement | Text);
+        insertInstance(parentDom, childInstance, nextSibling);
       }
     }
 
@@ -337,9 +418,12 @@ const reconcileChildren = (
     const oldChild = oldChildren[i];
     if (!oldChild) continue;
 
+    // key가 있는 자식 중 사용되지 않은 것 제거
     if (oldChild.key !== null && !usedKeys.has(oldChild.key)) {
       removeInstance(parentDom, oldChild);
-    } else if (oldChild.key === null && i >= newChildren.length) {
+    }
+    // key가 없는 자식 중 사용되지 않은 것 제거
+    else if (oldChild.key === null && !usedInstances.has(oldChild)) {
       removeInstance(parentDom, oldChild);
     }
   }

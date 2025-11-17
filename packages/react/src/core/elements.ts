@@ -52,6 +52,11 @@ export const createElement = (
   ...rawChildren: any[]
 ) => {
   // 여기를 구현하세요.
+  // type이 undefined이면 null을 반환하여 아무것도 렌더링하지 않음
+  if (type === undefined || type === null) {
+    return null;
+  }
+
   const { key, ...props } = originProps || {};
 
   const normalizeChildren = (children: any[]): VNode[] => {
