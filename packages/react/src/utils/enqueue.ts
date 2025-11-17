@@ -6,6 +6,11 @@ import type { AnyFunction } from "../types";
  */
 export const enqueue = (callback: () => void) => {
   // 여기를 구현하세요.
+  if (typeof queueMicrotask !== "undefined") {
+    queueMicrotask(callback);
+  } else {
+    Promise.resolve().then(callback);
+  }
 };
 
 /**
@@ -15,5 +20,14 @@ export const enqueue = (callback: () => void) => {
 export const withEnqueue = (fn: AnyFunction) => {
   // 여기를 구현하세요.
   // scheduled 플래그를 사용하여 fn이 한 번만 예약되도록 구현합니다.
-  return () => {};
+  let scheduled = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((...args: any[]) => {
+    if (scheduled) return;
+    scheduled = true;
+    enqueue(() => {
+      scheduled = false;
+      fn(...args);
+    });
+  }) as AnyFunction;
 };

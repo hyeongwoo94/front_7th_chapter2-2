@@ -11,5 +11,12 @@ import { useRef } from "./useRef";
 export const useAutoCallback = <T extends AnyFunction>(fn: T): T => {
   // 여기를 구현하세요.
   // useRef와 useCallback을 조합하여 구현해야 합니다.
-  return fn;
+  const ref = useRef(fn);
+
+  // 항상 최신 함수로 업데이트
+  ref.current = fn;
+
+  return useCallback((...args: Parameters<T>) => {
+    return ref.current(...args);
+  }, []) as T;
 };

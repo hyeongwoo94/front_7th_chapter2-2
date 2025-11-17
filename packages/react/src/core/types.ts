@@ -21,6 +21,7 @@ export interface Instance {
   children: (Instance | null)[];
   key: string | null;
   path: string;
+  childInstance?: Instance | null;
 }
 
 export interface EffectHook {

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { NodeType, NodeTypes } from "./constants";
+// import { NodeType, NodeTypes } from "./constants";
 import { Instance } from "./types";
 
 /**
@@ -8,6 +8,42 @@ import { Instance } from "./types";
  */
 export const setDomProps = (dom: HTMLElement, props: Record<string, any>): void => {
   // 여기를 구현하세요.
+  if (!(dom instanceof HTMLElement)) return;
+
+  for (const key in props) {
+    if (key === "children") continue;
+
+    const value = props[key];
+
+    // 이벤트 핸들러 처리
+    if (key.startsWith("on") && typeof value === "function") {
+      const eventType = key.slice(2).toLowerCase();
+      (dom as any)[`__${eventType}Handler`] = value;
+      dom.addEventListener(eventType, value);
+      continue;
+    }
+
+    // style 처리
+    if (key === "style" && typeof value === "object" && value !== null) {
+      Object.assign((dom as HTMLElement).style, value);
+      continue;
+    }
+
+    // className 처리
+    if (key === "className") {
+      dom.setAttribute("class", value);
+      continue;
+    }
+
+    // htmlFor 처리
+    if (key === "htmlFor") {
+      dom.setAttribute("for", value);
+      continue;
+    }
+
+    // 일반 속성
+    (dom as any)[key] = value;
+  }
 };
 
 /**
@@ -20,6 +56,84 @@ export const updateDomProps = (
   nextProps: Record<string, any> = {},
 ): void => {
   // 여기를 구현하세요.
+  if (!(dom instanceof HTMLElement)) return;
+
+  // 제거된 속성 처리
+  for (const key in prevProps) {
+    if (key === "children") continue;
+    if (key in nextProps) continue;
+
+    // 이벤트 핸들러 제거
+    if (key.startsWith("on") && typeof prevProps[key] === "function") {
+      const eventType = key.slice(2).toLowerCase();
+      const handler = prevProps[key];
+      dom.removeEventListener(eventType, handler);
+      delete (dom as any)[`__${eventType}Handler`];
+      continue;
+    }
+
+    // style 제거
+    if (key === "style" && typeof prevProps[key] === "object") {
+      (dom as HTMLElement).style.cssText = "";
+      continue;
+    }
+
+    // className 제거
+    if (key === "className") {
+      dom.removeAttribute("class");
+      continue;
+    }
+
+    // htmlFor 제거
+    if (key === "htmlFor") {
+      dom.removeAttribute("for");
+      continue;
+    }
+
+    // 일반 속성 제거
+    delete (dom as any)[key];
+  }
+
+  // 추가/변경된 속성 처리
+  for (const key in nextProps) {
+    if (key === "children") continue;
+    if (prevProps[key] === nextProps[key]) continue;
+
+    const value = nextProps[key];
+
+    // 이벤트 핸들러 업데이트
+    if (key.startsWith("on") && typeof value === "function") {
+      const eventType = key.slice(2).toLowerCase();
+      const prevHandler = (dom as any)[`__${eventType}Handler`];
+      if (prevHandler) {
+        dom.removeEventListener(eventType, prevHandler);
+      }
+      (dom as any)[`__${eventType}Handler`] = value;
+      dom.addEventListener(eventType, value);
+      continue;
+    }
+
+    // style 업데이트
+    if (key === "style" && typeof value === "object" && value !== null) {
+      Object.assign((dom as HTMLElement).style, value);
+      continue;
+    }
+
+    // className 업데이트
+    if (key === "className") {
+      dom.setAttribute("class", value);
+      continue;
+    }
+
+    // htmlFor 업데이트
+    if (key === "htmlFor") {
+      dom.setAttribute("for", value);
+      continue;
+    }
+
+    // 일반 속성 업데이트
+    (dom as any)[key] = value;
+  }
 };
 
 /**
@@ -28,7 +142,30 @@ export const updateDomProps = (
  */
 export const getDomNodes = (instance: Instance | null): (HTMLElement | Text)[] => {
   // 여기를 구현하세요.
-  return [];
+  if (!instance) return [];
+
+  const nodes: (HTMLElement | Text)[] = [];
+
+  // instance.dom이 있으면 포함
+  if (instance.dom) {
+    nodes.push(instance.dom);
+  }
+
+  // instance.children 재귀 탐색
+  if (instance.children) {
+    for (const child of instance.children) {
+      if (child) {
+        nodes.push(...getDomNodes(child));
+      }
+    }
+  }
+
+  // instance.childInstance 재귀 탐색 (컴포넌트)
+  if (instance.childInstance) {
+    nodes.push(...getDomNodes(instance.childInstance));
+  }
+
+  return nodes;
 };
 
 /**
@@ -36,6 +173,28 @@ export const getDomNodes = (instance: Instance | null): (HTMLElement | Text)[] =
  */
 export const getFirstDom = (instance: Instance | null): HTMLElement | Text | null => {
   // 여기를 구현하세요.
+  if (!instance) return null;
+
+  // instance.dom 있으면 반환
+  if (instance.dom) {
+    return instance.dom;
+  }
+
+  // instance.children에서 첫 DOM 찾기
+  if (instance.children) {
+    for (const child of instance.children) {
+      if (child) {
+        const dom = getFirstDom(child);
+        if (dom) return dom;
+      }
+    }
+  }
+
+  // instance.childInstance에서 첫 DOM 찾기 (컴포넌트)
+  if (instance.childInstance) {
+    return getFirstDom(instance.childInstance);
+  }
+
   return null;
 };
 
@@ -44,6 +203,15 @@ export const getFirstDom = (instance: Instance | null): HTMLElement | Text | nul
  */
 export const getFirstDomFromChildren = (children: (Instance | null)[]): HTMLElement | Text | null => {
   // 여기를 구현하세요.
+  if (!children) return null;
+
+  for (const child of children) {
+    if (child) {
+      const dom = getFirstDom(child);
+      if (dom) return dom;
+    }
+  }
+
   return null;
 };
 
@@ -57,6 +225,17 @@ export const insertInstance = (
   anchor: HTMLElement | Text | null = null,
 ): void => {
   // 여기를 구현하세요.
+  if (!instance) return;
+
+  const nodes = getDomNodes(instance);
+
+  for (const node of nodes) {
+    if (anchor) {
+      parentDom.insertBefore(node, anchor);
+    } else {
+      parentDom.appendChild(node);
+    }
+  }
 };
 
 /**
@@ -64,4 +243,15 @@ export const insertInstance = (
  */
 export const removeInstance = (parentDom: HTMLElement, instance: Instance | null): void => {
   // 여기를 구현하세요.
+  if (!instance) return;
+
+  const nodes = getDomNodes(instance);
+
+  // 역순으로 제거 (인덱스 오류 방지)
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i];
+    if (node.parentNode === parentDom) {
+      parentDom.removeChild(node);
+    }
+  }
 };
