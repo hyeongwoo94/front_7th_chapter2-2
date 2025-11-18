@@ -50,11 +50,16 @@ export const createElement = (
   type: string | symbol | React.ComponentType<any>,
   originProps?: Record<string, any> | null,
   ...rawChildren: any[]
-) => {
+): VNode => {
   // 여기를 구현하세요.
   // type이 undefined이면 null을 반환하여 아무것도 렌더링하지 않음
   if (type === undefined || type === null) {
-    return null;
+    // null을 반환할 수 없으므로 빈 Fragment를 반환
+    return {
+      type: Fragment,
+      key: null,
+      props: { children: [] },
+    };
   }
 
   const { key, ...props } = originProps || {};

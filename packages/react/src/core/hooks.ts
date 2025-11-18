@@ -42,13 +42,18 @@ export const useState = <T>(initialValue: T | (() => T)): [T, (nextValue: T | ((
   // 1. 현재 컴포넌트의 훅 커서와 상태 배열을 가져옵니다.
   const path = context.hooks.currentPath;
   const cursor = context.hooks.currentCursor;
-  const hooks = context.hooks.currentHooks;
+  let hooks = context.hooks.state.get(path);
+
+  // hooks 배열이 없으면 생성
+  if (!hooks) {
+    hooks = [];
+    context.hooks.state.set(path, hooks);
+  }
 
   // 2. 첫 렌더링이라면 초기값으로 상태를 설정합니다.
-  if (!hooks[cursor]) {
+  if (hooks[cursor] === undefined) {
     const value = typeof initialValue === "function" ? (initialValue as () => T)() : initialValue;
     hooks[cursor] = value;
-    context.hooks.state.set(path, hooks);
   }
 
   const state = hooks[cursor] as T;
@@ -118,7 +123,7 @@ export const useEffect = (effect: () => (() => void) | void, deps?: unknown[]): 
   // 4. 예약된 이펙트는 렌더링이 끝난 후 비동기로 실행됩니다.
   const effectHook: EffectHook = {
     kind: HookTypes.EFFECT,
-    deps: deps === undefined ? null : deps,
+    deps: deps === undefined ? null : deps ? [...deps] : null,
     cleanup: null,
     effect,
   };

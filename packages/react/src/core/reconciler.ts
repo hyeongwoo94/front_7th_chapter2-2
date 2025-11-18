@@ -209,6 +209,21 @@ const update = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement, p
   }
 
   // DOM 요소 처리
+  // 타입이 다르면 새로운 DOM 요소를 생성해야 함
+  if (oldInstance.kind === NodeTypes.HOST) {
+    const oldType = oldInstance.node.type as string;
+    const newType = newNode.type as string;
+
+    if (oldType !== newType) {
+      // 타입이 다르면 기존 DOM을 제거하고 새로 마운트
+      if (oldInstance.dom && oldInstance.dom.parentNode) {
+        oldInstance.dom.parentNode.removeChild(oldInstance.dom);
+      }
+      removeInstance(parentDom, oldInstance);
+      return mount(parentDom, newNode, path);
+    }
+  }
+
   if (oldInstance.dom) {
     const oldProps = oldInstance.node.props || {};
     const newProps = newNode.props || {};

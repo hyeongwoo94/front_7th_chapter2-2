@@ -17,17 +17,25 @@ export const setup = (rootNode: VNode | null, container: HTMLElement): void => {
     throw new Error("컨테이너가 제공되지 않았습니다.");
   }
 
-  // 2. 이전 렌더링 내용을 정리하고 컨테이너를 비웁니다.
+  // 2. null 루트 엘리먼트는 렌더할 수 없습니다.
+  if (rootNode === null) {
+    throw new Error("루트 엘리먼트가 null입니다.");
+  }
+
+  // 3. 이전 렌더링 내용을 정리하고 컨테이너를 비웁니다.
   if (context.root.instance) {
     removeInstance(container, context.root.instance);
   }
+  // 컨테이너의 모든 자식 노드를 제거
+  container.innerHTML = "";
 
-  // 3. 루트 컨텍스트와 훅 컨텍스트를 리셋합니다.
-  if (rootNode !== null) {
-    context.root.reset({ container, node: rootNode });
-  }
+  // 4. 루트 컨텍스트와 훅 컨텍스트를 리셋합니다.
+  context.root.reset({ container, node: rootNode });
+  // 테스트 간 상태 초기화를 위해 state와 cursor도 초기화
+  context.hooks.state.clear();
+  context.hooks.cursor.clear();
   context.hooks.clear();
 
-  // 4. 첫 렌더링을 실행합니다.
+  // 5. 첫 렌더링을 실행합니다.
   render();
 };
