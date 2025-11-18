@@ -1,7 +1,8 @@
-import { context, enterComponent, exitComponent } from "./context";
+import { enterComponent, exitComponent } from "./context";
 import { Fragment, NodeTypes, TEXT_ELEMENT } from "./constants";
 import { Instance, VNode } from "./types";
 import {
+  getDomNodes,
   getFirstDom,
   getFirstDomFromChildren,
   insertInstance,
@@ -48,9 +49,7 @@ export const reconcile = (
   }
 
   // 4. 타입과 키가 같으면 인스턴스를 업데이트합니다. (update)
-  // context를 사용하여 루트 컨테이너 정보 확인
-  const container = context.root.container || parentDom;
-  return update(instance, node, container as HTMLElement, path);
+  return update(instance, node, parentDom, path);
 };
 
 /**
@@ -279,6 +278,13 @@ const updateComponent = (oldInstance: Instance, newNode: VNode, parentDom: HTMLE
 
 /**
  * 자식 노드들을 재조정합니다.
+ * 명세서 3. 리컨실리에이션과 자식 비교 전략 참고
+ *
+ * 알고리즘:
+ * 1. Key 기반 Map 생성
+ * 2. 새 자식들을 순회하며 매칭 및 reconcile
+ * 3. 순서가 변경된 자식들을 올바른 위치로 이동 (역순 처리)
+ * 4. 사용되지 않은 기존 자식 제거
  */
 const reconcileChildren = (
   parentDom: HTMLElement,
@@ -289,83 +295,57 @@ const reconcileChildren = (
   const oldChildren = instance.children || [];
   const childInstances: (Instance | null)[] = [];
 
-  // Key 기반 Map 생성 (null이 아닌 자식만)
+  // 1단계: Key 기반 Map 생성 및 인덱스 추적
   const keyMap = new Map<string | number, Instance>();
-  for (const oldChild of oldChildren) {
-    if (oldChild && oldChild.key !== null) {
-      keyMap.set(oldChild.key, oldChild);
+  const oldIndexMap = new Map<Instance, number>();
+  for (let idx = 0; idx < oldChildren.length; idx++) {
+    const oldChild = oldChildren[idx];
+    if (oldChild) {
+      oldIndexMap.set(oldChild, idx);
+      if (oldChild.key !== null) {
+        keyMap.set(oldChild.key, oldChild);
+      }
     }
   }
 
   const usedKeys = new Set<string | number>();
   const usedInstances = new Set<Instance>();
-  // 실제 렌더링된 oldChildren만 필터링
   const renderedOldChildren = oldChildren.filter((child) => child !== null);
   let renderedOldIndex = 0;
 
-  // 새 자식 처리
+  // 2단계: 새 자식들을 순회하며 매칭 및 reconcile
   for (let i = 0; i < newChildren.length; i++) {
     const newChild = newChildren[i];
 
     // 조건부 렌더링으로 인한 null/false 처리
     if (isEmptyValue(newChild)) {
       childInstances.push(null);
-      // key가 없는 기존 자식이 있으면 제거 (인덱스 매칭)
-      while (renderedOldIndex < renderedOldChildren.length) {
-        const oldChild = renderedOldChildren[renderedOldIndex];
-        if (!oldChild) {
-          renderedOldIndex++;
-          continue;
-        }
-        // key가 있는 자식은 건너뛰기
-        if (oldChild.key !== null) {
-          renderedOldIndex++;
-          continue;
-        }
-        // key가 없는 자식이면 제거
-        removeInstance(parentDom, oldChild);
-        renderedOldIndex++;
-        break;
-      }
       continue;
     }
 
     const childPath = createChildPath(parentPath, newChild.key, i, newChild.type, newChildren);
     let childInstance: Instance | null = null;
-    let needsInsertion = false;
 
-    // Key로 매칭
+    // 2-1: Key로 매칭
     if (newChild.key !== null && keyMap.has(newChild.key)) {
       const matched = keyMap.get(newChild.key)!;
       if (matched.node.type === newChild.type) {
         childInstance = reconcile(parentDom, matched, newChild, childPath);
         usedKeys.add(newChild.key);
         usedInstances.add(matched);
-        // 순서가 변경되었는지 확인
-        const matchedIndex = renderedOldChildren.indexOf(matched);
-        const currentRenderedIndex = renderedOldChildren.findIndex(
-          (c, idx) => idx >= renderedOldIndex && c && c.key === null && !usedInstances.has(c),
-        );
-        if (matchedIndex !== currentRenderedIndex && matchedIndex >= 0) {
-          needsInsertion = true;
-        }
       }
     }
 
-    // Key로 매칭되지 않으면 인덱스로 매칭 (key가 없는 자식만)
+    // 2-2: Key로 매칭되지 않으면 인덱스로 매칭 (key가 없는 자식만)
     if (!childInstance) {
+      // 순차적으로 매칭 시도
       while (renderedOldIndex < renderedOldChildren.length) {
         const oldChild = renderedOldChildren[renderedOldIndex];
-        if (!oldChild) {
+        if (!oldChild || usedInstances.has(oldChild)) {
           renderedOldIndex++;
           continue;
         }
-        // 이미 사용된 인스턴스는 건너뛰기
-        if (usedInstances.has(oldChild)) {
-          renderedOldIndex++;
-          continue;
-        }
-        // key가 있는 자식은 건너뛰기
+        // key가 있는 자식은 건너뛰기 (이미 key로 매칭 시도했음)
         if (oldChild.key !== null) {
           renderedOldIndex++;
           continue;
@@ -379,66 +359,101 @@ const reconcileChildren = (
         }
         renderedOldIndex++;
       }
+
+      // 순차 매칭 실패 시, 마지막 자식인 경우 역순으로 타입 기반 매칭 시도
+      // (Footer처럼 항상 마지막에 위치하는 컴포넌트를 위해)
+      if (!childInstance && i === newChildren.length - 1) {
+        for (let k = renderedOldChildren.length - 1; k >= 0; k--) {
+          const oldChild = renderedOldChildren[k];
+          if (!oldChild || usedInstances.has(oldChild)) continue;
+          if (oldChild.key !== null) continue;
+          if (oldChild.node.type === newChild.type) {
+            childInstance = reconcile(parentDom, oldChild, newChild, childPath);
+            usedInstances.add(oldChild);
+            break;
+          }
+        }
+      }
     }
 
-    // 매칭되지 않으면 새로 마운트
+    // 2-3: 매칭되지 않으면 새로 마운트
+    // 새로 마운트된 자식은 일단 마지막에 추가하고, 나중에 위치를 조정
     if (!childInstance) {
+      // Fragment의 경우 parentDom에 직접 추가하지 않고, 나중에 위치 조정
+      // 하지만 mount 함수는 항상 parentDom에 추가하므로, 여기서는 그대로 호출
       childInstance = mount(parentDom, newChild, childPath);
-      needsInsertion = true;
-    }
-
-    // 순서가 변경되었거나 새로 마운트된 경우 올바른 위치에 삽입
-    if (needsInsertion && childInstance) {
-      // 다음 실제 렌더링된 자식의 DOM을 찾아서 그 앞에 삽입
-      let nextSibling: HTMLElement | Text | null = null;
-      for (let j = i + 1; j < newChildren.length; j++) {
-        const nextChild = newChildren[j];
-        if (!isEmptyValue(nextChild)) {
-          // childInstances에서 다음 실제 자식 찾기
-          if (j < childInstances.length) {
-            const inst = childInstances[j];
-            if (inst) {
-              nextSibling = getFirstDom(inst) as HTMLElement | Text | null;
-              break;
-            }
-          }
-          // 아직 처리되지 않았다면 기존 자식 중에서 찾기
-          if (!nextSibling) {
-            for (const oldChild of renderedOldChildren) {
-              if (oldChild && oldChild.node === nextChild && !usedInstances.has(oldChild)) {
-                nextSibling = getFirstDom(oldChild) as HTMLElement | Text | null;
-                break;
-              }
-            }
-          }
-          break;
-        }
-      }
-
-      if (nextSibling) {
-        // 기존 DOM에서 제거 후 올바른 위치에 삽입
-        const firstDom = getFirstDom(childInstance);
-        if (firstDom && firstDom.parentNode === parentDom) {
-          parentDom.removeChild(firstDom);
-        }
-        insertInstance(parentDom, childInstance, nextSibling);
-      }
     }
 
     childInstances.push(childInstance);
   }
 
-  // 사용되지 않은 기존 자식 제거
+  // 3단계: 순서가 변경된 자식들을 올바른 위치로 이동
+  // 역순으로 처리하여 DOM 이동을 최소화 (명세서: 역순 순회와 anchor)
+  for (let i = childInstances.length - 1; i >= 0; i--) {
+    const childInstance = childInstances[i];
+    if (!childInstance) continue;
+
+    const newChild = newChildren[i];
+    if (isEmptyValue(newChild)) continue;
+
+    const oldIndex = oldIndexMap.get(childInstance);
+    const isNewlyMounted = oldIndex === undefined;
+    const needsMove = isNewlyMounted || (oldIndex !== undefined && oldIndex !== i);
+
+    if (!needsMove) continue;
+
+    // 다음 실제 렌더링된 자식의 DOM을 찾아서 그 앞에 삽입 (anchor)
+    // 역순으로 처리하므로, 이미 처리된 자식들의 DOM은 올바른 위치에 있음
+    let nextSibling: HTMLElement | Text | null = null;
+    for (let j = i + 1; j < newChildren.length; j++) {
+      const nextChild = newChildren[j];
+      if (!isEmptyValue(nextChild) && j < childInstances.length) {
+        const inst = childInstances[j];
+        if (inst) {
+          const dom = getFirstDom(inst);
+          if (dom && dom.parentNode === parentDom) {
+            nextSibling = dom as HTMLElement | Text;
+            break;
+          }
+        }
+      }
+    }
+
+    // DOM을 올바른 위치로 이동
+    const firstDom = getFirstDom(childInstance);
+    if (firstDom) {
+      const currentParent = firstDom.parentNode;
+      const currentNextSibling = firstDom.nextSibling;
+
+      // 새로 마운트된 자식이거나 위치가 변경된 경우
+      if (isNewlyMounted || currentParent !== parentDom || currentNextSibling !== nextSibling) {
+        // 기존 위치에서 제거 (이미 parentDom에 있는 경우만)
+        if (currentParent === parentDom) {
+          // 모든 DOM 노드를 제거
+          const nodes = getDomNodes(childInstance);
+          for (const node of nodes) {
+            if (node.parentNode === parentDom) {
+              parentDom.removeChild(node);
+            }
+          }
+        }
+        // 올바른 위치에 삽입
+        insertInstance(parentDom, childInstance, nextSibling);
+      }
+    } else {
+      // DOM이 없으면 새로 삽입 (Fragment나 컴포넌트의 경우)
+      insertInstance(parentDom, childInstance, nextSibling);
+    }
+  }
+
+  // 4단계: 사용되지 않은 기존 자식 제거
   for (let i = 0; i < oldChildren.length; i++) {
     const oldChild = oldChildren[i];
     if (!oldChild) continue;
 
-    // key가 있는 자식 중 사용되지 않은 것 제거
     if (oldChild.key !== null && !usedKeys.has(oldChild.key)) {
       removeInstance(parentDom, oldChild);
-    }
-    // key가 없는 자식 중 사용되지 않은 것 제거
-    else if (oldChild.key === null && !usedInstances.has(oldChild)) {
+    } else if (oldChild.key === null && !usedInstances.has(oldChild)) {
       removeInstance(parentDom, oldChild);
     }
   }

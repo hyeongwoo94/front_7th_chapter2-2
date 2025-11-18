@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// import { NodeType, NodeTypes } from "./constants";
+import { NodeTypes } from "./constants";
 import { Instance } from "./types";
 
 /**
@@ -311,14 +311,46 @@ export const insertInstance = (
   // 여기를 구현하세요.
   if (!instance) return;
 
-  const nodes = getDomNodes(instance);
-
-  for (const node of nodes) {
-    if (anchor) {
-      parentDom.insertBefore(node, anchor);
-    } else {
-      parentDom.appendChild(node);
+  // Fragment의 경우 모든 children의 DOM 노드를 순서대로 삽입
+  if (instance.kind === NodeTypes.FRAGMENT) {
+    if (instance.children) {
+      for (const child of instance.children) {
+        if (child) {
+          insertInstance(parentDom, child, anchor);
+          // 다음 children을 위한 anchor 업데이트
+          const childFirstDom = getFirstDom(child);
+          if (childFirstDom && childFirstDom.parentNode === parentDom) {
+            // 다음 children은 이전 children의 마지막 DOM 노드 다음에 삽입
+            // Fragment의 children은 순차적으로 배치되므로, 마지막 DOM 노드를 찾아야 함
+            const childNodes = getDomNodes(child);
+            if (childNodes.length > 0) {
+              const lastChildNode = childNodes[childNodes.length - 1];
+              if (lastChildNode.parentNode === parentDom) {
+                anchor = lastChildNode.nextSibling as HTMLElement | Text | null;
+              }
+            }
+          }
+        }
+      }
     }
+    return;
+  }
+
+  // 일반 인스턴스의 경우 첫 번째 DOM 노드만 처리 (children은 자동으로 포함됨)
+  const firstDom = getFirstDom(instance);
+  if (!firstDom) return;
+
+  // 노드가 이미 올바른 위치에 있으면 건너뛰기
+  if (firstDom.parentNode === parentDom && firstDom.nextSibling === anchor) {
+    return;
+  }
+
+  // 노드가 이미 다른 위치에 있으면 insertBefore가 자동으로 이동시킴
+  if (anchor) {
+    parentDom.insertBefore(firstDom, anchor);
+  } else {
+    // anchor가 null이면 마지막에 추가
+    parentDom.appendChild(firstDom);
   }
 };
 
