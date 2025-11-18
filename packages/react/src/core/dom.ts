@@ -41,8 +41,27 @@ export const setDomProps = (dom: HTMLElement, props: Record<string, any>): void 
       continue;
     }
 
-    // 일반 속성
-    (dom as any)[key] = value;
+    // data- 속성 처리
+    if (key.startsWith("data-")) {
+      dom.setAttribute(key, String(value ?? ""));
+      continue;
+    }
+
+    // 일반 속성 (id, type, value 등)
+    // DOM 속성으로 설정할 수 있는 것들은 직접 설정, 그 외는 setAttribute 사용
+    if (key in dom || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      if (typeof value === "boolean") {
+        if (value) {
+          dom.setAttribute(key, "");
+        } else {
+          dom.removeAttribute(key);
+        }
+      } else {
+        dom.setAttribute(key, String(value ?? ""));
+      }
+    } else {
+      (dom as any)[key] = value;
+    }
   }
 };
 
@@ -90,8 +109,18 @@ export const updateDomProps = (
       continue;
     }
 
+    // data- 속성 제거
+    if (key.startsWith("data-")) {
+      dom.removeAttribute(key);
+      continue;
+    }
+
     // 일반 속성 제거
-    delete (dom as any)[key];
+    if (key in dom) {
+      dom.removeAttribute(key);
+    } else {
+      delete (dom as any)[key];
+    }
   }
 
   // 추가/변경된 속성 처리
@@ -131,8 +160,27 @@ export const updateDomProps = (
       continue;
     }
 
+    // data- 속성 업데이트
+    if (key.startsWith("data-")) {
+      dom.setAttribute(key, String(value ?? ""));
+      continue;
+    }
+
     // 일반 속성 업데이트
-    (dom as any)[key] = value;
+    // DOM 속성으로 설정할 수 있는 것들은 직접 설정, 그 외는 setAttribute 사용
+    if (key in dom || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      if (typeof value === "boolean") {
+        if (value) {
+          dom.setAttribute(key, "");
+        } else {
+          dom.removeAttribute(key);
+        }
+      } else {
+        dom.setAttribute(key, String(value ?? ""));
+      }
+    } else {
+      (dom as any)[key] = value;
+    }
   }
 };
 
