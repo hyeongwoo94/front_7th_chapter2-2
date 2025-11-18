@@ -47,6 +47,18 @@ export const setDomProps = (dom: HTMLElement, props: Record<string, any>): void 
       continue;
     }
 
+    // input 요소의 특수 속성 처리 (checked, value는 DOM 속성으로 직접 설정)
+    if (dom instanceof HTMLInputElement) {
+      if (key === "checked") {
+        (dom as HTMLInputElement).checked = Boolean(value);
+        continue;
+      }
+      if (key === "value") {
+        (dom as HTMLInputElement).value = String(value ?? "");
+        continue;
+      }
+    }
+
     // 일반 속성 (id, type, value 등)
     // DOM 속성으로 설정할 수 있는 것들은 직접 설정, 그 외는 setAttribute 사용
     if (key in dom || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -115,6 +127,18 @@ export const updateDomProps = (
       continue;
     }
 
+    // input 요소의 특수 속성 제거 (checked, value는 DOM 속성으로 직접 설정)
+    if (dom instanceof HTMLInputElement) {
+      if (key === "checked") {
+        (dom as HTMLInputElement).checked = false;
+        continue;
+      }
+      if (key === "value") {
+        (dom as HTMLInputElement).value = "";
+        continue;
+      }
+    }
+
     // 일반 속성 제거
     if (key in dom) {
       dom.removeAttribute(key);
@@ -164,6 +188,18 @@ export const updateDomProps = (
     if (key.startsWith("data-")) {
       dom.setAttribute(key, String(value ?? ""));
       continue;
+    }
+
+    // input 요소의 특수 속성 처리 (checked, value는 DOM 속성으로 직접 설정)
+    if (dom instanceof HTMLInputElement) {
+      if (key === "checked") {
+        (dom as HTMLInputElement).checked = Boolean(value);
+        continue;
+      }
+      if (key === "value") {
+        (dom as HTMLInputElement).value = String(value ?? "");
+        continue;
+      }
     }
 
     // 일반 속성 업데이트
