@@ -35,9 +35,6 @@ const initialState = {
  * 장바구니 아이템 찾기
  */
 const findCartItem = (items, productId) => {
-  if (!items || !Array.isArray(items)) {
-    return undefined;
-  }
   return items.find((item) => item.id === productId);
 };
 
@@ -48,22 +45,16 @@ const findCartItem = (items, productId) => {
  */
 const cartReducer = (_, action) => {
   const state = cartStorage.get() ?? initialState;
-  // state.items가 없거나 배열이 아니면 초기화
-  const safeState = {
-    ...initialState,
-    ...state,
-    items: Array.isArray(state.items) ? state.items : [],
-  };
   switch (action.type) {
     case CART_ACTIONS.ADD_ITEM: {
       const { product, quantity = 1 } = action.payload;
-      const existingItem = findCartItem(safeState.items, product.productId);
+      const existingItem = findCartItem(state.items, product.productId);
 
       if (existingItem) {
         // 기존 아이템 수량 증가
         return {
-          ...safeState,
-          items: safeState.items.map((item) =>
+          ...state,
+          items: state.items.map((item) =>
             item.id === product.productId ? { ...item, quantity: item.quantity + quantity } : item,
           ),
         };
@@ -78,37 +69,35 @@ const cartReducer = (_, action) => {
           selected: false,
         };
         return {
-          ...safeState,
-          items: [...safeState.items, newItem],
+          ...state,
+          items: [...state.items, newItem],
         };
       }
     }
 
     case CART_ACTIONS.REMOVE_ITEM:
       return {
-        ...safeState,
-        items: safeState.items.filter((item) => item.id !== action.payload),
+        ...state,
+        items: state.items.filter((item) => item.id !== action.payload),
       };
 
     case CART_ACTIONS.UPDATE_QUANTITY: {
       const { productId, quantity } = action.payload;
       return {
-        ...safeState,
-        items: safeState.items.map((item) =>
-          item.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item,
-        ),
+        ...state,
+        items: state.items.map((item) => (item.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item)),
       };
     }
 
     case CART_ACTIONS.CLEAR_CART:
       return {
-        ...safeState,
+        ...state,
         items: [],
         selectedAll: false,
       };
     case CART_ACTIONS.TOGGLE_SELECT: {
       const productId = action.payload;
-      const updatedItems = safeState.items.map((item) =>
+      const updatedItems = state.items.map((item) =>
         item.id === productId ? { ...item, selected: !item.selected } : item,
       );
 
@@ -116,33 +105,33 @@ const cartReducer = (_, action) => {
       const allSelected = updatedItems.length > 0 && updatedItems.every((item) => item.selected);
 
       return {
-        ...safeState,
+        ...state,
         items: updatedItems,
         selectedAll: allSelected,
       };
     }
 
     case CART_ACTIONS.SELECT_ALL: {
-      const updatedItems = safeState.items.map((item) => ({
+      const updatedItems = state.items.map((item) => ({
         ...item,
         selected: true,
       }));
 
       return {
-        ...safeState,
+        ...state,
         items: updatedItems,
         selectedAll: true,
       };
     }
 
     case CART_ACTIONS.DESELECT_ALL: {
-      const updatedItems = safeState.items.map((item) => ({
+      const updatedItems = state.items.map((item) => ({
         ...item,
         selected: false,
       }));
 
       return {
-        ...safeState,
+        ...state,
         items: updatedItems,
         selectedAll: false,
       };
@@ -150,20 +139,19 @@ const cartReducer = (_, action) => {
 
     case CART_ACTIONS.REMOVE_SELECTED:
       return {
-        ...safeState,
-        items: safeState.items.filter((item) => !item.selected),
+        ...state,
+        items: state.items.filter((item) => !item.selected),
         selectedAll: false,
       };
 
     case CART_ACTIONS.LOAD_FROM_STORAGE:
       return {
-        ...initialState,
+        ...state,
         ...action.payload,
-        items: Array.isArray(action.payload?.items) ? action.payload.items : [],
       };
 
     default:
-      return safeState;
+      return state;
   }
 };
 /**
