@@ -25,16 +25,16 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.22.0
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22
           cache: "pnpm"
 
       - name: Install dependencies
-        run: ㅎ --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Get repository name
         id: repo
@@ -48,20 +48,7 @@ jobs:
           BASE_URL: /${{ steps.repo.outputs.name }}/
 
       - name: Add .nojekyll file
-        run: |
-          cd packages/app/dist
-          touch .nojekyll
-          echo "Created .nojekyll file"
-          ls -la .nojekyll
-
-      - name: Verify dist contents
-        run: |
-          echo "=== Dist folder contents ==="
-          ls -la packages/app/dist/ | head -20
-          echo "=== Checking for index.html ==="
-          test -f packages/app/dist/index.html && echo "✓ index.html exists" || echo "✗ index.html missing"
-          echo "=== Checking for .nojekyll ==="
-          test -f packages/app/dist/.nojekyll && echo "✓ .nojekyll exists" || echo "✗ .nojekyll missing"
+        run: touch packages/app/dist/.nojekyll
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
