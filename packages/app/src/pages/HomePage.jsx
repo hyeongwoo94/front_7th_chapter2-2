@@ -59,7 +59,6 @@ export const HomePage = () => {
   const { products, loading, error, totalCount, categories } = productState;
   const category = { category1, category2 };
   const hasMore = products.length < totalCount;
-  const currentPath = router.route?.path;
 
   useEffect(() => {
     if (loading) {
@@ -69,31 +68,9 @@ export const HomePage = () => {
   }, [searchQuery, limit, sort, category1, category2]);
 
   useEffect(() => {
-    // 홈 페이지일 때만 실행
-    const checkAndLoad = () => {
-      const path = router.route?.path;
-      if (path === "/") {
-        registerScrollHandler();
-
-        // 카테고리가 없거나 비어있으면 다시 로드
-        const state = productStore.getState();
-        if (!state.categories || Object.keys(state.categories).length === 0) {
-          loadProductsAndCategories();
-        }
-      } else {
-        unregisterScrollHandler();
-      }
-    };
-
-    // 초기 체크
-    checkAndLoad();
-
-    // 라우터 변경 감지
-    router.subscribe(checkAndLoad);
-
-    return () => {
-      unregisterScrollHandler();
-    };
+    registerScrollHandler();
+    loadProductsAndCategories();
+    return () => unregisterScrollHandler();
   }, []);
 
   return (

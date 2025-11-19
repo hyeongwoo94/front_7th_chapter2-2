@@ -141,7 +141,10 @@ const mount = (parentDom: HTMLElement, node: VNode, path: string): Instance => {
 const mountComponent = (parentDom: HTMLElement, node: VNode, path: string): Instance => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Component = node.type as React.ComponentType<Record<string, any>>;
-  const componentPath = createChildPath(path, node.key, 0, node.type);
+  // 라우트 변경을 감지하기 위해 window.location.pathname을 path에 포함
+  const routePath = typeof window !== "undefined" ? window.location.pathname : "";
+  const basePath = createChildPath(path, node.key, 0, node.type);
+  const componentPath = routePath ? `${basePath}.r${routePath.replace(/\//g, "_")}` : basePath;
 
   enterComponent(componentPath);
 
@@ -204,7 +207,7 @@ const update = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement, p
 
   // 컴포넌트 처리
   if (oldInstance.kind === NodeTypes.COMPONENT) {
-    return updateComponent(oldInstance, newNode, parentDom);
+    return updateComponent(oldInstance, newNode, parentDom, path);
   }
 
   // DOM 요소 처리
@@ -240,10 +243,36 @@ const update = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement, p
 /**
  * 함수 컴포넌트를 업데이트합니다.
  */
-const updateComponent = (oldInstance: Instance, newNode: VNode, parentDom: HTMLElement): Instance => {
+const updateComponent = (
+  oldInstance: Instance,
+  newNode: VNode,
+  parentDom: HTMLElement,
+  parentPath: string,
+): Instance => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Component = newNode.type as React.ComponentType<Record<string, any>>;
-  const path = oldInstance.path;
+  // 부모 path를 기반으로 새로운 component path 생성
+  const basePath = createChildPath(parentPath, newNode.key, 0, newNode.type);
+
+  // 라우트 변경을 감지하기 위해 window.location.pathname을 path에 포함
+  const currentRoutePath = typeof window !== "undefined" ? window.location.pathname : "";
+  const path = currentRoutePath ? `${basePath}.r${currentRoutePath.replace(/\//g, "_")}` : basePath;
+
+  // 이전 인스턴스의 라우트 경로 추출 (path에서 .r 이후 부분 추출)
+  const oldPathMatch = oldInstance.path.match(/\.r(.+)$/);
+  const oldRoutePath = oldPathMatch ? oldPathMatch[1].replace(/_/g, "/") : "";
+
+  // 라우트 경로가 변경되었거나 path가 변경되었을 때는 기존 인스턴스를 완전히 제거하고 새로 마운트
+  // 이렇게 하면 모든 하위 컴포넌트들이 새로운 path로 재생성되어 useEffect가 다시 실행됨
+  if (oldInstance.path !== path || oldRoutePath !== currentRoutePath) {
+    // 기존 인스턴스 제거
+    if (oldInstance.childInstance) {
+      removeInstance(parentDom, oldInstance.childInstance);
+    }
+
+    // 새로 마운트 (이렇게 하면 모든 하위 컴포넌트들이 새로운 path로 재생성됨)
+    return mountComponent(parentDom, newNode, parentPath);
+  }
 
   enterComponent(path);
 
