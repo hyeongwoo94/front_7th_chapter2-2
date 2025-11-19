@@ -6,6 +6,9 @@ const base: string =
 
 export default createViteConfig({
   base,
+  define: {
+    "import.meta.env.BASE_URL": JSON.stringify(base),
+  },
   esbuild: {
     jsx: "transform",
     jsxInject: `import React from 'react';`,
