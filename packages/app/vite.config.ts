@@ -18,6 +18,7 @@ export default createViteConfig({
         main: resolve(__dirname, "index.html"),
         404: resolve(__dirname, "404.html"),
       },
+      external: ["react"],
     },
   },
 });

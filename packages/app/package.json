@@ -30,5 +30,10 @@
     "typescript": "^5.8.3",
     "vite": "npm:rolldown-vite@latest",
     "vitest": "latest"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
