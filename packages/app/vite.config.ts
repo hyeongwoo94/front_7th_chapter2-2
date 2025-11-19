@@ -8,7 +8,7 @@ const getBasePath = (): string => {
 
   try {
     const remoteUrl = execSync("git remote get-url origin", { encoding: "utf-8" }).trim();
-    const match = remoteUrl.match(/\/([^햣/]+)\.git$/);
+    const match = remoteUrl.match(/\/([^/]+)\.git$/);
     const repoName = match ? match[1] : "front_7th_chapter2-2";
     return `/${repoName}/`;
   } catch {
