@@ -47,13 +47,16 @@ jobs:
           VITE_BASE_PATH: /${{ steps.repo.outputs.name }}/
           BASE_URL: /${{ steps.repo.outputs.name }}/
 
+      - name: Add .nojekyll file
+        run: touch packages/app/dist/.nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './packages/app/dist'
+          path: 'packages/app/dist'
 
   deploy:
     environment:
