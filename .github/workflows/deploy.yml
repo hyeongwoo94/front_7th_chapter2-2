@@ -34,7 +34,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: ㅎ --frozen-lockfile
 
       - name: Get repository name
         id: repo

@@ -19,13 +19,6 @@ export function createViteConfig(options: UserConfig = {}, testOptions: ViteUser
         "react-dom/client": resolve(__dirname, "packages/react/src/client/index.ts"),
       },
     },
-    server: {
-      ...options.server,
-    },
-    ssr: {
-      ...options.ssr,
-      noExternal: options.ssr?.noExternal || [],
-    },
   });
   const testConfig = defineTestConfig({
     test: {
@@ -45,20 +38,6 @@ export function createViteConfig(options: UserConfig = {}, testOptions: ViteUser
     };
   } else if (options.define) {
     merged.define = options.define;
-  }
-
-  // server 설정이 undefined가 되지 않도록 보장
-  if (!merged.server) {
-    merged.server = {};
-  }
-
-  // ssr 설정이 undefined가 되지 않도록 보장
-  if (!merged.ssr) {
-    merged.ssr = {
-      noExternal: [],
-    };
-  } else if (!merged.ssr.noExternal) {
-    merged.ssr.noExternal = [];
   }
 
   return merged;

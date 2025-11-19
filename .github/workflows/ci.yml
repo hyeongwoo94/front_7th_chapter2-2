@@ -25,7 +25,7 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm run test:basic
   advacned:
     runs-on: ubuntu-latest
@@ -42,7 +42,7 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm run test:advanced
   e2e:
     timeout-minutes: 60
@@ -60,6 +60,6 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           npx playwright install --with-deps
           pnpm run test:e2e
