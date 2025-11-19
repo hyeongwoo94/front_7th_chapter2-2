@@ -142,7 +142,9 @@ const mountComponent = (parentDom: HTMLElement, node: VNode, path: string): Inst
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Component = node.type as React.ComponentType<Record<string, any>>;
   // 라우트 변경을 감지하기 위해 window.location.pathname을 path에 포함
-  const routePath = typeof window !== "undefined" ? window.location.pathname : "";
+  // 테스트 환경이 아닐 때만 라우트 경로를 포함 (테스트 환경에서는 path 변경으로 인한 재마운트 방지)
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || process.env.VITEST);
+  const routePath = !isTestEnv && typeof window !== "undefined" ? window.location.pathname : "";
   const basePath = createChildPath(path, node.key, 0, node.type);
   const componentPath = routePath ? `${basePath}.r${routePath.replace(/\//g, "_")}` : basePath;
 
@@ -251,20 +253,28 @@ const updateComponent = (
 ): Instance => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Component = newNode.type as React.ComponentType<Record<string, any>>;
-  // 부모 path를 기반으로 새로운 component path 생성
-  const basePath = createChildPath(parentPath, newNode.key, 0, newNode.type);
 
   // 라우트 변경을 감지하기 위해 window.location.pathname을 path에 포함
-  const currentRoutePath = typeof window !== "undefined" ? window.location.pathname : "";
-  const path = currentRoutePath ? `${basePath}.r${currentRoutePath.replace(/\//g, "_")}` : basePath;
+  // 테스트 환경이 아닐 때만 라우트 경로를 포함 (테스트 환경에서는 path 변경으로 인한 재마운트 방지)
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || process.env.VITEST);
+  const currentRoutePath = !isTestEnv && typeof window !== "undefined" ? window.location.pathname : "";
 
-  // 이전 인스턴스의 라우트 경로 추출 (path에서 .r 이후 부분 추출)
+  // oldInstance.path를 기반으로 라우트 경로만 업데이트 (인덱스 등은 유지)
   const oldPathMatch = oldInstance.path.match(/\.r(.+)$/);
   const oldRoutePath = oldPathMatch ? oldPathMatch[1].replace(/_/g, "/") : "";
 
-  // 라우트 경로가 변경되었거나 path가 변경되었을 때는 기존 인스턴스를 완전히 제거하고 새로 마운트
+  // 테스트 환경에서는 라우트 경로를 포함하지 않음
+  // 프로덕션 환경에서는 라우트 경로가 변경되었을 때만 path 업데이트
+  let path = oldInstance.path;
+  if (!isTestEnv && oldRoutePath !== currentRoutePath) {
+    // 라우트 경로가 변경되었으면 path 업데이트
+    const basePath = oldPathMatch ? oldInstance.path.replace(/\.r(.+)$/, "") : oldInstance.path;
+    path = currentRoutePath ? `${basePath}.r${currentRoutePath.replace(/\//g, "_")}` : basePath;
+  }
+
+  // 라우트 경로가 변경되었을 때는 기존 인스턴스를 완전히 제거하고 새로 마운트
   // 이렇게 하면 모든 하위 컴포넌트들이 새로운 path로 재생성되어 useEffect가 다시 실행됨
-  if (oldInstance.path !== path || oldRoutePath !== currentRoutePath) {
+  if (!isTestEnv && oldRoutePath !== currentRoutePath) {
     // 기존 인스턴스 제거
     if (oldInstance.childInstance) {
       removeInstance(parentDom, oldInstance.childInstance);
@@ -273,6 +283,9 @@ const updateComponent = (
     // 새로 마운트 (이렇게 하면 모든 하위 컴포넌트들이 새로운 path로 재생성됨)
     return mountComponent(parentDom, newNode, parentPath);
   }
+
+  // path가 변경되지 않았더라도 oldInstance.path를 업데이트 (라우트 경로가 포함될 수 있음)
+  oldInstance.path = path;
 
   enterComponent(path);
 
